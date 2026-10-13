@@ -1,0 +1,9 @@
+.git
+.tools
+.local
+.env
+secrets
+reports
+__pycache__
+*.exe
+

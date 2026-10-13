@@ -1,0 +1,165 @@
+name: aegis-agent-gateway
+
+x-runtime: &runtime
+  build: .
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:size=16m,mode=1777]
+  restart: unless-stopped
+
+x-tool: &tool
+  <<: *runtime
+  command: [tool]
+  networks: [tools, state]
+  secrets: [public_key]
+  environment: &tool-env
+    PUBLIC_KEY_FILE: /run/secrets/public_key
+    REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  depends_on:
+    redis: {condition: service_healthy}
+
+services:
+  bootstrap:
+    build: .
+    profiles: [setup]
+    user: "0:0"
+    command: [keygen]
+    environment: {SECRETS_DIR: /secrets, SECRETS_MODE: "0444"}
+    volumes: [./secrets:/secrets]
+    network_mode: none
+
+  gateway:
+    <<: *runtime
+    ports: ["127.0.0.1:8080:8080"]
+    networks: [agents, tools, state]
+    secrets: [private_key, admin_token, redis_password, postgres_password]
+    environment:
+      PRIVATE_KEY_FILE: /run/secrets/private_key
+      ADMIN_TOKEN_FILE: /run/secrets/admin_token
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+    depends_on:
+      redis: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+      opa: {condition: service_started}
+      docs: {condition: service_started}
+      tickets: {condition: service_started}
+      exports: {condition: service_started}
+
+  docs:
+    <<: *tool
+    secrets: [public_key, docs_redis_password]
+    environment: {<<: *tool-env, TOOL_KIND: docs, REDIS_USER: docs-tool, REDIS_PASSWORD_FILE: /run/secrets/docs_redis_password}
+  tickets:
+    <<: *tool
+    secrets: [public_key, tickets_redis_password]
+    environment: {<<: *tool-env, TOOL_KIND: tickets, REDIS_USER: tickets-tool, REDIS_PASSWORD_FILE: /run/secrets/tickets_redis_password}
+  exports:
+    <<: *tool
+    secrets: [public_key, exports_redis_password]
+    environment: {<<: *tool-env, TOOL_KIND: exports, REDIS_USER: exports-tool, REDIS_PASSWORD_FILE: /run/secrets/exports_redis_password}
+
+  redis:
+    image: redis:7.4.6-alpine
+    networks: [state]
+    secrets: [redis_password, docs_redis_password, tickets_redis_password, exports_redis_password]
+    user: redis
+    command: [sh, /etc/aegis/redis-start.sh]
+    volumes: [redis-data:/data, ./deployments/redis-start.sh:/etc/aegis/redis-start.sh:ro]
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$(cat /run/secrets/redis_password)" redis-cli --user gateway ping | grep PONG']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17.6-alpine
+    networks: [state]
+    environment:
+      POSTGRES_DB: aegis
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+    secrets: [postgres_password, postgres_admin_password]
+    volumes: [postgres-data:/var/lib/postgresql/data, ./deployments/init.sql:/docker-entrypoint-initdb.d/01-audit.sql:ro, ./deployments/02-role.sh:/docker-entrypoint-initdb.d/02-role.sh:ro]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d aegis]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    restart: unless-stopped
+
+  opa:
+    image: openpolicyagent/opa:1.9.0-static
+    command: [run, --server, --addr=0.0.0.0:8181, /policies]
+    volumes: [./policies:/policies:ro]
+    networks: [state]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  otel:
+    image: otel/opentelemetry-collector:0.137.0
+    command: [--config=/etc/otel.yaml]
+    volumes: [./deployments/otel.yaml:/etc/otel.yaml:ro]
+    networks: [state]
+
+  demo:
+    image: python:3.13.7-alpine
+    profiles: [demo]
+    command: [python, /app/client/evaluate.py, --url, http://gateway:8080, --admin-file, /run/secrets/admin_token, --report, /reports/evaluation.json, --network-check, --deployment, compose]
+    volumes: [./client:/app/client:ro, ./reports:/reports]
+    secrets: [admin_token]
+    networks: [agents]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on: [gateway]
+
+  agent:
+    image: python:3.13.7-alpine
+    profiles: [agent]
+    command: [python, /app/client/agent.py, --url, http://gateway:8080]
+    volumes: [./client:/app/client:ro]
+    networks: [agents]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    environment: {PYTHONDONTWRITEBYTECODE: "1"}
+
+  verify:
+    build: {context: ., target: build}
+    profiles: [verify]
+    command: [go, test, -v, -count=1, ./internal/state, ./internal/audit]
+    networks: [state]
+    secrets: [redis_password, docs_redis_password, postgres_password]
+    environment:
+      REDIS_TEST_ADDR: redis:6379
+      REDIS_TEST_USER: gateway
+      REDIS_TEST_PASSWORD_FILE: /run/secrets/redis_password
+      DOCS_REDIS_PASSWORD_FILE: /run/secrets/docs_redis_password
+      PG_TEST_URL: postgres://aegis@postgres:5432/aegis?sslmode=disable
+      PG_TEST_PASSWORD_FILE: /run/secrets/postgres_password
+    depends_on:
+      redis: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+
+networks:
+  agents: {internal: true}
+  tools: {internal: true}
+  state: {internal: true}
+
+volumes:
+  redis-data:
+  postgres-data:
+
+secrets:
+  private_key: {file: ./secrets/private.key}
+  public_key: {file: ./secrets/public.key}
+  admin_token: {file: ./secrets/admin.token}
+  redis_password: {file: ./secrets/redis.password}
+  postgres_password: {file: ./secrets/postgres.password}
+  postgres_admin_password: {file: ./secrets/postgres-admin.password}
+  docs_redis_password: {file: ./secrets/docs-redis.password}
+  tickets_redis_password: {file: ./secrets/tickets-redis.password}
+  exports_redis_password: {file: ./secrets/exports-redis.password}

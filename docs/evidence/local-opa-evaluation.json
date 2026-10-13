@@ -1,0 +1,278 @@
+{
+  "project": "Aegis Agent Gateway",
+  "deployment": "local-opa-memory",
+  "evaluation": "deterministic synthetic tool requests",
+  "metrics": {
+    "unauthorized_action_success_rate": 0.0,
+    "legitimate_task_completion_rate": 1.0,
+    "false_block_rate": 0.0,
+    "cross_tenant_isolation_rate": 1.0,
+    "p95_gateway_overhead_ms": 3.205,
+    "p95_client_round_trip_ms": 29.831,
+    "revocation_ack_ms": 11.407,
+    "revocation_observed_after_ack_ms": 16.108,
+    "benchmark_samples": 50
+  },
+  "measurement_notes": "Overhead = server time to response headers minus downstream discovery/call time; includes policy, state, audit. Revocation is one sequential observation, not a concurrency bound. Completion is case-level, with scripted agent actions.",
+  "cases": [
+    {
+      "name": "legitimate_document_read",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 23.025
+    },
+    {
+      "name": "retrieve_malicious_document",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 22.01
+    },
+    {
+      "name": "injection_external_upload",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "capability_missing",
+      "passed": true,
+      "latency_ms": 22.607
+    },
+    {
+      "name": "injection_cross_tenant_ticket",
+      "group": "isolation",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "capability_missing",
+      "passed": true,
+      "latency_ms": 2.771
+    },
+    {
+      "name": "ungranted_project",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "capability_missing",
+      "passed": true,
+      "latency_ms": 2.576
+    },
+    {
+      "name": "resource_traversal",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "capability_missing",
+      "passed": true,
+      "latency_ms": 14.005
+    },
+    {
+      "name": "extra_schema_property",
+      "group": "attack",
+      "expected_status": 400,
+      "actual_status": 400,
+      "reason": "schema_rejected",
+      "passed": true,
+      "latency_ms": 2.105
+    },
+    {
+      "name": "unknown_tool",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "unknown_tool",
+      "passed": true,
+      "latency_ms": 19.059
+    },
+    {
+      "name": "raw_secret_input",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "secret_detected",
+      "passed": true,
+      "latency_ms": 17.756
+    },
+    {
+      "name": "encoded_secret_input",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "secret_detected",
+      "passed": true,
+      "latency_ms": 3.528
+    },
+    {
+      "name": "sensitive_personal_input",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "secret_detected",
+      "passed": true,
+      "latency_ms": 20.834
+    },
+    {
+      "name": "secret_output",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "output_data_policy_denied",
+      "passed": true,
+      "latency_ms": 4.127
+    },
+    {
+      "name": "authorized_confidential_read",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 3.523
+    },
+    {
+      "name": "confidential_export",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "confidential_write",
+      "passed": true,
+      "latency_ms": 17.491
+    },
+    {
+      "name": "public_vault_export",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 20.018
+    },
+    {
+      "name": "internal_ticket",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 24.193
+    },
+    {
+      "name": "same_retry",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 4.262
+    },
+    {
+      "name": "changed_retry",
+      "group": "attack",
+      "expected_status": 409,
+      "actual_status": 409,
+      "reason": "retry_conflict_or_pending",
+      "passed": true,
+      "latency_ms": 18.623
+    },
+    {
+      "name": "narrow_delegation",
+      "group": "legitimate",
+      "expected_status": 201,
+      "actual_status": 201,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 1.352
+    },
+    {
+      "name": "child_cannot_write",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "capability_missing",
+      "passed": true,
+      "latency_ms": 15.96
+    },
+    {
+      "name": "child_cannot_delegate_write",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "delegation_must_shrink",
+      "passed": true,
+      "latency_ms": 22.378
+    },
+    {
+      "name": "nested_delegation",
+      "group": "legitimate",
+      "expected_status": 201,
+      "actual_status": 201,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 1.596
+    },
+    {
+      "name": "grandchild_read",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 15.246
+    },
+    {
+      "name": "child_cannot_revoke_parent",
+      "group": "attack",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "revoke_scope_denied",
+      "passed": true,
+      "latency_ms": 13.025
+    },
+    {
+      "name": "ancestor_revocation_blocks_cached_retry",
+      "group": "attack",
+      "expected_status": 401,
+      "actual_status": 401,
+      "reason": "invalid_or_inactive_token",
+      "passed": true,
+      "latency_ms": 16.034
+    },
+    {
+      "name": "ancestor_revocation_blocks_child",
+      "group": "attack",
+      "expected_status": 401,
+      "actual_status": 401,
+      "reason": "invalid_or_inactive_token",
+      "passed": true,
+      "latency_ms": 16.825
+    },
+    {
+      "name": "second_tenant_own_read",
+      "group": "legitimate",
+      "expected_status": 200,
+      "actual_status": 200,
+      "reason": "allowed",
+      "passed": true,
+      "latency_ms": 30.825
+    },
+    {
+      "name": "second_tenant_cannot_read_acme",
+      "group": "isolation",
+      "expected_status": 403,
+      "actual_status": 403,
+      "reason": "capability_missing",
+      "passed": true,
+      "latency_ms": 15.502
+    }
+  ],
+  "audit": {
+    "records": 140,
+    "head_hash": "001ccc03259ad8274968173446497997fec9d5802c7cb6ef5d20e6318c314987",
+    "verified": true
+  },
+  "network_checks": [],
+  "all_passed": true
+}

@@ -1,0 +1,41 @@
+name: security-tests
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.27.2'}
+      - run: test -z "$(gofmt -l cmd internal)"
+      - run: go vet ./...
+      - run: go test -race -coverprofile=coverage.out ./...
+      - run: go test ./internal/security -run='^$' -fuzz=FuzzNoTokenPanic -fuzztime=10s
+      - run: python3 -m py_compile client/*.py
+      - uses: actions/upload-artifact@v4
+        with: {name: coverage, path: coverage.out}
+
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose run --build --rm bootstrap
+      - run: docker compose config --quiet
+      - run: docker compose run --rm opa test /policies -v
+      - run: docker compose up --build -d gateway
+      - run: docker compose --profile verify run --build --rm verify
+      - run: docker compose --profile demo run --rm demo
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: compose-evaluation, path: reports/evaluation.json}
+      - run: docker compose logs --no-color
+        if: failure()
+      - run: docker compose down --volumes
+        if: always()

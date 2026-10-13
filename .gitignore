@@ -1,0 +1,12 @@
+.tools/
+.local/
+.env
+secrets/
+reports/*.json
+reports/*.csv
+__pycache__/
+*.exe
+coverage.out
+*.test
+*.zip
+
